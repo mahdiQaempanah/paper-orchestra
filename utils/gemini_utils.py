@@ -168,6 +168,16 @@ def call_gemini_with_contents(
     Calls the Gemini API (text-only) with retry logic and exponential backoff.
     """
 
+    if os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+        from utils.codex_utils import call_codex_with_contents
+
+        return call_codex_with_contents(
+            contents=contents,
+            generation_configs=generation_configs,
+            result_parsing_func=result_parsing_func,
+            check_parsed_response_not_none=check_parsed_response_not_none,
+        )
+
     raw_response = None
     parsed_response = None
 
@@ -261,8 +271,11 @@ def call_gemini_with_images(
     for image_path in images:
         with open(image_path, "rb") as f:
             img_bytes = f.read()
+        mime_type = "image/png"
+        if os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+            mime_type = mimetypes.guess_type(image_path)[0] or mime_type
         llm_contents.append(
-            types.Part.from_bytes(data=img_bytes, mime_type="image/png")
+            types.Part.from_bytes(data=img_bytes, mime_type=mime_type)
         )
 
     response_dict = call_gemini_with_contents(

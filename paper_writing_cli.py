@@ -23,6 +23,14 @@ def main():
     parser = argparse.ArgumentParser(
         description="CLI for generating a single paper from the Paper Orchestra pipeline."
     )
+    parser.add_argument(
+        "--backend", choices=("api", "codex"), default="api",
+        help="Use the original API backend or the signed-in Codex CLI.",
+    )
+    parser.add_argument(
+        "--codex-model", default=None,
+        help="Optional Codex model override; defaults to your Codex configuration.",
+    )
 
     parser.add_argument(
         "--raw_materials_dir",
@@ -88,6 +96,18 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if args.backend == "codex":
+        if args.use_plotting:
+            parser.error(
+                "The Codex backend does not support the plotting pipeline; "
+                "supply figures in raw_materials/figures instead."
+            )
+        os.environ["PAPER_ORCHESTRA_BACKEND"] = "codex"
+        if args.codex_model:
+            os.environ["PAPER_ORCHESTRA_CODEX_MODEL"] = args.codex_model
+    else:
+        os.environ.pop("PAPER_ORCHESTRA_BACKEND", None)
 
     if args.research_cutoff is None:
         args.research_cutoff = datetime.now().strftime("%Y-%m")

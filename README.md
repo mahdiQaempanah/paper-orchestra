@@ -20,6 +20,37 @@ Acting like an orchestrated team of specialized agents, it handles outline gener
 
 ## Installation
 
+### Codex CLI backend
+
+This fork can use a signed-in Codex CLI for the writing pipeline. Install this
+repository's Python dependencies as described below, install Codex CLI, and
+sign in with `codex login`. Check your CLI configuration with `codex login status`.
+
+```bash
+python paper_writing_cli.py \
+  --backend codex \
+  --raw_materials_dir /path/to/raw_materials \
+  --latex_template_dir /path/to/template \
+  --output_dir /path/to/new-output
+```
+
+Pass `--codex-model MODEL` if the model in your Codex configuration is not
+available to your account. The Codex backend uses the configured Codex account
+and model. Each pipeline model call starts a separate read-only Codex session.
+Literature discovery enables Codex web search and still uses the upstream
+Semantic Scholar verification. Research material is sent to Codex, and search
+queries are sent to external services. The upstream pipeline may replace files
+in the output directory; use a fresh output directory for each run.
+
+The Codex backend supports the pipeline with supplied figures and
+`--use_plotting false` (the default). The upstream plotting pipeline and image
+generation still require their original model API support and are unavailable
+with `--backend codex`. PDF pages for visual review are passed as images.
+The existing API backend remains the default.
+
+Review all generated results, proofs, and references before use. Codex sessions
+and model choices have their own availability and usage limits.
+
 1.  **Environment Setup**: The project relies on a Conda environment named `paper_orchestra`. You can set up a similar environment with Python 3.11 and install the required dependencies.
     ```bash
     conda create -n paper_orchestra python=3.11
