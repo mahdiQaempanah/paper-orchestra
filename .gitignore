@@ -1,6 +1,7 @@
 *.pyc
 *.out
 .env
+.venv/
 *.log
 datasets/*
 paper_output*

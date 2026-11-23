@@ -54,6 +54,9 @@ class PaperData(BaseModel):
     volume: Optional[str] = None
     pages: Optional[str] = None
     publication_date: Optional[str] = None
+    bibtex_type: Optional[str] = None
+    doi: Optional[str] = None
+    metadata_source: Optional[str] = None
 
 
 class WriterOutput(BaseModel):
@@ -172,10 +175,16 @@ class HybridLiteratureAgent:
         if not active_tasks:
             return
 
-        self._safe_print(f"   🔎 Phase 1a: Google Candidates Discovery (MaxPool=10)...")
+        max_workers = 10
+        if os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+            max_workers = self.max_workers
+        self._safe_print(
+            f"   🔎 Phase 1a: Candidates Discovery (MaxPool={max_workers})..."
+        )
         all_candidates_with_tasks = []
+        failed_searches = 0
 
-        with ThreadPoolExecutor(max_workers=10) as executor:  # Fast for Google Search!
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_task = {
                 executor.submit(
                     self._process_search_task_google, task, outline, cutoff_date
@@ -192,9 +201,18 @@ class HybridLiteratureAgent:
                                 {"cand": cand_item, "task": task}
                             )
                 except Exception as exc:
+                    failed_searches += 1
                     self._safe_print(
                         f"      ❌ Google Search failed for '{task['focus'][:20]}...': {exc}"
                     )
+
+        if (
+            os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex"
+            and failed_searches == len(active_tasks)
+        ):
+            raise RuntimeError(
+                "All Codex literature searches failed; the paper cannot be generated reliably."
+            )
 
         self._safe_print(
             f"   📊 Phase 1b: Semantic Scholar Enrichment (Rate-limited, sequential)..."
@@ -313,14 +331,19 @@ class HybridLiteratureAgent:
             )
 
         retry_count = 0
+        last_error = None
         while retry_count < 3:
             try:
                 candidates = self._discover_candidates(task, outline, cutoff_date)
+                last_error = None
                 if candidates:
                     return candidates
                 retry_count += 1
             except Exception as e:
+                last_error = e
                 retry_count += 1
+        if last_error and os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+            raise RuntimeError("Codex literature discovery failed") from last_error
         return []
 
     def _enrich_and_register_paper(self, cand, task, registry, cutoff_date):
@@ -336,6 +359,13 @@ class HybridLiteratureAgent:
 
         try:
             s2_data = s2_title_search(cand_title, cand_year, cutoff_date)
+            metadata_source = "Semantic Scholar" if s2_data else None
+            if not s2_data and os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+                from utils.openalex_utils import openalex_title_search
+
+                s2_data = openalex_title_search(cand_title, cand_year)
+                if s2_data:
+                    metadata_source = "OpenAlex"
 
             if s2_data:
                 if not self._is_paper_allowed(s2_data, cutoff_date):
@@ -359,7 +389,11 @@ class HybridLiteratureAgent:
                     ),
                     title=s2_data["title"],
                     authors=authors_list,
-                    venue=s2_data.get("venue") or "arXiv",
+                    venue=s2_data.get("venue") or (
+                        "Unknown venue"
+                        if os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex"
+                        else "arXiv"
+                    ),
                     year=s2_data.get("year") or cand_year,
                     abstract=abstract_text,
                     citation_count=s2_data.get("citationCount") or 0,
@@ -369,6 +403,9 @@ class HybridLiteratureAgent:
                     volume=j_info.get("volume"),
                     pages=j_info.get("pages"),
                     publication_date=s2_data.get("publicationDate"),
+                    bibtex_type=s2_data.get("bibtex_type"),
+                    doi=s2_data.get("doi"),
+                    metadata_source=metadata_source,
                 )
 
                 final_norm_title = self._normalize_title(full_obj.title)
@@ -380,7 +417,8 @@ class HybridLiteratureAgent:
                             f"      -> 📚 Added enriched paper: {full_obj.title}"
                         )
         except Exception as e:
-            pass
+            if os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+                raise RuntimeError(f"Could not verify candidate '{cand_title}'") from e
 
     def _is_paper_allowed(self, s2_data: Dict, cutoff_date_str: str) -> bool:
         if not cutoff_date_str:
@@ -551,11 +589,16 @@ class HybridLiteratureAgent:
             seen_keys.add(unique_key)
 
             author_str = " and ".join(p.authors) if p.authors else "Unknown"
-            entry_type = "article" if p.journal else "inproceedings"
+            entry_type = p.bibtex_type or (
+                "article" if p.journal else "inproceedings"
+            )
 
             entry = f"@{entry_type}{{{p.citation_key},\n  title={{{p.title}}},\n  author={{{author_str}}},\n"
             if p.journal:
                 entry += f"  journal={{{p.journal}}},\n"
+            elif entry_type == "misc":
+                if p.venue and p.venue != "Unknown venue":
+                    entry += f"  howpublished={{{p.venue}}},\n"
             else:
                 entry += f"  booktitle={{{p.venue}}},\n"
             entry += f"  year={{{p.year}}}"
@@ -563,6 +606,8 @@ class HybridLiteratureAgent:
                 entry += f",\n  volume={{{p.volume}}}"
             if p.pages:
                 entry += f",\n  pages={{{p.pages}}}"
+            if p.doi:
+                entry += f",\n  doi={{{p.doi}}}"
             entry += "\n}"
             entries.append(entry)
         return "\n\n".join(entries)
@@ -576,6 +621,8 @@ class HybridLiteratureAgent:
                 "venue": p.venue,
                 "year": p.year,
                 "abstract": p.abstract.strip(),
+                "doi": p.doi,
+                "metadata_source": p.metadata_source,
             }
             for p in papers
             if p.abstract

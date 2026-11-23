@@ -106,6 +106,8 @@ class ContentRefinementAgent:
         except Exception as e:
             print(f" >> [Reviewer] Error generating review: {e}")
             traceback.print_exc()
+            if os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+                raise
             return {"Error": str(e), "Overall": 0}, 0.0
 
     def _get_formatting_review(self, pdf_path: str, iteration_label: str) -> dict:
@@ -174,6 +176,8 @@ Respond in JSON format with the following structure:
         except Exception as e:
             print(f" >> [VLM] Error generating formatting review: {e}")
             traceback.print_exc()
+            if os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+                raise
             return {"Error": str(e)}
 
     def _extract_scores(self, review: dict) -> dict:
@@ -439,6 +443,8 @@ INSTRUCTION:
             except Exception as e:
                 print(f" >> Error during refinement loop: {e}")
                 traceback.print_exc()
+                if os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+                    raise
                 break
 
         # End of Loop
@@ -574,6 +580,8 @@ block.
             except Exception as e:
                 print(f" >> Error during formatting iteration: {e}")
                 traceback.print_exc()
+                if os.getenv("PAPER_ORCHESTRA_BACKEND") == "codex":
+                    raise
 
         # Save Final Output
         final_pdf_output_path = os.path.join(self.work_dir, "final_refined_paper.pdf")

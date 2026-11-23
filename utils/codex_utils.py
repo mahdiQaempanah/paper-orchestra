@@ -55,11 +55,18 @@ def call_codex_with_contents(
                 raise ValueError(f"Unsupported content type: {mime_type}")
 
         output = directory / "response.txt"
-        command = ["codex"]
+        command = [
+            "codex",
+            "--disable", "plugins",
+            "--disable", "multi_agent",
+            "--disable", "shell_tool",
+            "--disable", "unified_exec",
+            "--disable", "code_mode_host",
+        ]
         if generation_configs.get("tools"):
             command.append("--search")
         command.extend([
-            "exec", "--ephemeral", "--skip-git-repo-check",
+            "exec", "--ignore-user-config", "--ephemeral", "--skip-git-repo-check",
             "--sandbox", "read-only", "--output-last-message", str(output),
         ])
         if os.getenv("PAPER_ORCHESTRA_CODEX_MODEL"):

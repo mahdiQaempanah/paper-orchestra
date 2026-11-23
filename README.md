@@ -34,11 +34,18 @@ python paper_writing_cli.py \
   --output_dir /path/to/new-output
 ```
 
-Pass `--codex-model MODEL` if the model in your Codex configuration is not
-available to your account. The Codex backend uses the configured Codex account
-and model. Each pipeline model call starts a separate read-only Codex session.
-Literature discovery enables Codex web search and still uses the upstream
-Semantic Scholar verification. Research material is sent to Codex, and search
+Pass `--codex-model MODEL` to choose a model available to your account. To keep
+an override for future runs, set
+`PAPER_ORCHESTRA_CODEX_MODEL=MODEL` in the repository's `.env` file or your
+environment. The Codex backend uses the configured Codex account
+and selected model. Each pipeline model call starts a separate read-only Codex
+session with user configuration, plugins, shell tools and multi-agent tools
+disabled. This prevents a request from starting nested coding sessions. Codex's
+built-in web search remains available for literature discovery. If no model is
+specified, the Codex CLI chooses its default model.
+Literature discovery enables Codex web search and uses Semantic Scholar, with
+OpenAlex as a fallback when a candidate has no Semantic Scholar match. Metadata
+matches still need to be checked against the original sources. Research material is sent to Codex, and search
 queries are sent to external services. The upstream pipeline may replace files
 in the output directory; use a fresh output directory for each run.
 
